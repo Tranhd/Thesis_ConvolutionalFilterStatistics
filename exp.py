@@ -2,17 +2,25 @@ import numpy as np
 import sys
 sys.path.append('../Thesis_CNN_mnist/')
 from cnn import MnistCNN
+sys.path.append('../Thesis_Utilities/')
+from utilities import load_datasets
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.pipeline import Pipeline
 import tensorflow as tf
+from sklearn import svm
 from tensorflow.examples.tutorials.mnist import input_data
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+from sklearn import metrics
 
 tf.reset_default_graph()
 sess = tf.Session()
-net = MnistCNN(sess, save_dir='../Thesis_CNN_mnist/Mnist_save/')
-mnist = input_data.read_data_sets('MNIST_data/', reshape=False, one_hot=True)
+net = MnistCNN(sess, save_dir='../Thesis_CNN_mnist/MnistCNN_save/')
+
+x_train, y_train, x_val, y_val, x_test, y_test = load_datasets(test_size=10000, val_size=5000, omniglot_bool=True,
+                                                               name_data_set='data_omni_seed1337.h5', force=False,
+                                                               create_file=True, r_seed=1337)
 
 def extract_activations(train_images, net, batch_size=5000):
     layers = []
@@ -42,14 +50,14 @@ def create_layerstats(layers, pcas):
         for j in range(len(layers[k])):
             if len(layers[k][j].shape) > 2:
                 temp = np.reshape(layers[k][j], (-1,layers[k][j].shape[-1]))
-                s1 = np.linalg.norm(pcas[k].transform(temp), ord=1, axis=0)
-                s2 = np.mean(temp, axis=0)
-                s3 = np.percentile(temp, [25, 50, 75])
+                s1 = 1/temp.shape[0] * np.linalg.norm(pcas[k].transform(temp), ord=1, axis=0)
+                s2 = np.percentile(temp, [25, 50, 75], axis=0)
+                s3 = np.max(temp, axis=0)
             else:
                 temp = np.reshape(layers[k][j], (-1, len(layers[k][j])))
-                s1 = np.linalg.norm(pcas[k].transform(temp), ord=1)
-                s2 = np.mean(temp)
-                s3 = np.percentile(temp, [25, 50, 75])
+                s1 = pcas[k].transform(temp)
+                s2 = np.percentile(temp, [25, 50, 75])
+                s3 = np.max(temp)
             t = np.append(s1, s2)
             t = np.append(t, s3)
             layer.append(t)
@@ -59,29 +67,64 @@ def create_layerstats(layers, pcas):
 
 
 
-image = mnist.train.images[1:100,:,:,:]
-labels = mnist.train.labels[1:100,:]
-preds, _,_ = net.predict(image)
-index = np.where(np.argmax(labels, 1) != preds)
-print(len(index[0]))
-image = np.concatenate((image[index[0]], image[0:len(index[0])]), axis=0)
+image1 = x_test[-20:,:,:,:]
+image2 = x_test[0:20,:,:,:]
+image = np.concatenate((image1, image2), axis=0)
 print(image.shape)
-
-layers = extract_activations(mnist.train.images[1:2000], net, batch_size=1000)
+layers = extract_activations(x_train[:2000], net, batch_size=2000)
 pcas = create_pca(layers)
 
-layers = extract_activations(image, net, batch_size=2)
-layersstats = create_layerstats(layers, pcas)
+normal_pool = x_train[20001:30000]
+omnipool = x_test[-1000:]
+
+print(x_test.shape)
+test_x = x_test[9000:11100]
+layers_test = extract_activations(test_x, net, batch_size=1000)
+layersstats_test = create_layerstats(layers_test, pcas)
+test_y = np.concatenate((np.ones((1000)),np.zeros((1000))), axis=0)
+
+layers_normal = extract_activations(normal_pool, net, batch_size=1000)
+layersstats_normal = create_layerstats(layers_normal, pcas)
+
+layers_omni = extract_activations(omnipool, net, batch_size=1000)
+layersstats_omni = create_layerstats(layers_omni, pcas)
+
+for ln, lo, lt in zip(layersstats_normal, layersstats_omni, layersstats_test):
+    normal_sample = ln[np.random.randint(len(ln), size=len(lo)),:]
+    T = np.concatenate((normal_sample, lo))
+    print(T.shape)
+    labels = np.concatenate((np.ones((len(lo))),np.zeros((len(lo)))))
+    print(labels.shape)
+    idx = np.random.permutation(len(T))
+    T = T[idx]
+    labels = labels[idx]
+    clf = svm.SVC()
+    clf.fit(T, labels)
+    score = clf.decision_function(lt)
+    fpr, tpr, threshold = metrics.roc_curve(test_y, score)
+    i = np.abs(tpr - 0.97).argmin()
+    th = threshold[i]
+    classification = (score >= th)
+    print()
+    print(f'Accuracy: {np.sum(classification == test_y)/len(test_y)}')
+
+
+"""
 rows, cols = 1, 1
 
 for stats in layersstats:
-    fig, axes = plt.subplots(figsize=(20, 4), nrows=rows, ncols=cols, sharex=True, sharey=True, squeeze=True)
     print(stats.shape)
-    axes.imshow(stats)
+    part = int((stats.shape[-1] - 3)/3)
+    print(part)
+    fig, axes = plt.subplots(figsize=(10, 4), nrows=1, ncols=4, sharex=True, sharey=True, squeeze=True)
+    for i,ax in enumerate(axes):
+        if i != 3:
+            ax.imshow(stats[:,i*part:i*part + part])
+        else:
+            ax.imshow(stats[:,-3:])
     plt.show()
 plt.close()
-
-
+"""
 
 """
 w = 2
