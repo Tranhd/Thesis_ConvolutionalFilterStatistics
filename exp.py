@@ -16,7 +16,7 @@ from sklearn import metrics
 
 tf.reset_default_graph()
 sess = tf.Session()
-net = MnistCNN(sess, save_dir='../Thesis_CNN_mnist/MnistCNN_save/')
+net = MnistCNN(sess, save_dir='../Thesis_CNN_mnist/Mnist_save/')
 
 x_train, y_train, x_val, y_val, x_test, y_test = load_datasets(test_size=10000, val_size=5000, omniglot_bool=True,
                                                                name_data_set='data_omni_seed1337.h5', force=False,
@@ -94,7 +94,6 @@ for ln, lo, lt in zip(layersstats_normal, layersstats_omni, layersstats_test):
     T = np.concatenate((normal_sample, lo))
     print(T.shape)
     labels = np.concatenate((np.ones((len(lo))),np.zeros((len(lo)))))
-    print(labels.shape)
     idx = np.random.permutation(len(T))
     T = T[idx]
     labels = labels[idx]
@@ -105,7 +104,6 @@ for ln, lo, lt in zip(layersstats_normal, layersstats_omni, layersstats_test):
     i = np.abs(tpr - 0.97).argmin()
     th = threshold[i]
     classification = (score >= th)
-    print()
     print(f'Accuracy: {np.sum(classification == test_y)/len(test_y)}')
 
 
